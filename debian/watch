@@ -1,0 +1,4 @@
+version=3
+opts=uversionmangle=s/\.(RC|rc|pre|dev|beta|alpha)/~$1/,\
+filenamemangle=s/.+\/v?(\d\S*)\.tar\.gz/lua-luv-$1\.tar\.gz/ \
+https://github.com/luvit/luv/tags .*/v?(\d\S*)\.tar\.gz

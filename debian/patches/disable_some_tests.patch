@@ -1,0 +1,26 @@
+Description: disable tests that require network or fail to run
+ Some tests require network access (to test dns or tcp connections)
+ .
+ Debian packges shouldn't rely on any kind of network to be able to build,
+ so those tests need to be disabled.
+ .
+ Additionally some tests fail to pass on 32bit architectures with Lua5.1, until
+ this is fixed these tests are disabled.
+Author: Jason Pleau <jason@jpleau.ca>
+--- a/tests/run.lua
++++ b/tests/run.lua
+@@ -18,11 +18,13 @@
+ 
+ local req = uv.fs_scandir("tests")
+ 
++local disabled_tests = { tcp = true, dns = true, conversions = true, udp = true }
++
+ while true do
+   local name = uv.fs_scandir_next(req)
+   if not name then break end
+   local match = string.match(name, "^test%-(.*).lua$")
+-  if match then
++  if match and disabled_tests[match] == nil then
+     local path = "tests/test-" .. match
+     tap(match)
+     require(path)

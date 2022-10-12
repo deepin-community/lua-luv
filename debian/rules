@@ -1,0 +1,16 @@
+#!/usr/bin/make -f
+
+DPKG_EXPORT_BUILDFLAGS = 1
+DEB_BUILD_MAINT_OPTIONS = hardening=+all
+include /usr/share/dpkg/buildflags.mk
+
+%:
+	dh $@ --buildsystem=lua --with lua
+
+override_dh_auto_install:
+# Do not install usr/include/lua{luaver}/luv.h, since all the headers get
+# installed to usr/include/lua{luaver}/luv/
+	sed -i '/usr\/include\/lua5\.[1-9]\/luv\.h/d' debian/lua-luv-dev.install
+	dh_auto_install
+# Remove usr/include/lua{luaver}/luv.h, so dh_missing doesn't complain
+	rm -f debian/tmp/usr/include/lua*/luv.h

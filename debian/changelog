@@ -1,0 +1,62 @@
+lua-luv (1.36.0-0-1) unstable; urgency=medium
+
+  * New upstream release
+  * Remove fix-compat53-include-path.patch, included upstream.
+  * Remove cherry-picked b461b6fa3.patch
+  * Stop disabling leaks test, since that is no longer automatically run.
+  * copyright: Remove unused Files stanza for deps/uv.cmake, not relevant
+    since 1.22.0-0
+  * control:
+    + Use canonical Vcs-Git URL
+  * Declare compliance with Policy 4.5.0
+  * Enable hardening build flags
+  * Add upstream/metadata file with relevant upstream fields
+
+ -- James McCoy <jamessan@debian.org>  Tue, 26 May 2020 22:30:56 -0400
+
+lua-luv (1.30.1-1-2) unstable; urgency=medium
+
+  * disable_some_tests.patch: add test-leaks to exceptions, since it's flaky
+
+ -- James McCoy <jamessan@debian.org>  Wed, 30 Oct 2019 21:30:09 -0400
+
+lua-luv (1.30.1-1-1) unstable; urgency=medium
+
+  [ Jason Pleau ]
+  * New upstream release
+  * Point Vcs-* to salsa.debian.org
+  * Add a B-D on debhelper-compat (and remove debian/compat)
+  * disable_some_tests.patch: add test-udp to exceptions
+  * Update Standards-Version to 4.4.0, no changes
+  * Add a Build-Depends on lua-compat53-dev
+
+  [ James McCoy ]
+  * Add fix-compat53-include-path.patch, to correct the expected include path
+    for lua-compat53-dev's compat-5.3.h
+  * debian/lua5.x.dh-lua.conf:
+    + Specify LUA_HEADER=src/luv.h so packages can build against the C API
+    + Add -Isrc to CLIB_CFLAGS to find the header when building the test app
+    + Add libuv1-dev Depends on lua-luv-dev
+  * Install all luv header files to /usr/include/lua5.x/luv/
+  * Cherry-pick upstream patch, b461b6fa3, to fix the process-stdout test when
+    run with dh-lua's app test.
+  * Set Rules-Requires-Root: no
+  * Mark lua-luv(-dev) Multi-Arch: same
+  * Add myself to Uploaders
+
+ -- James McCoy <jamessan@debian.org>  Tue, 29 Oct 2019 07:05:59 -0400
+
+lua-luv (1.9.1-0-2) unstable; urgency=medium
+
+  * autopkgtest: Add all build-deps so all tests can pass on Debian's CI
+  * Tests: disable test-conversions.lua. It does not work properly on
+    lua5.1/i386, and this behavior can't be relied on. (Closes: #834461)
+  * Add libkvm-dev to Build-Depends for kfreebsd-any (Closes: #834463)
+
+ -- Jason Pleau <jason@jpleau.ca>  Wed, 24 Aug 2016 19:26:41 -0400
+
+lua-luv (1.9.1-0-1) unstable; urgency=medium
+
+  * Initial release (Closes: #829039)
+
+ -- Jason Pleau <jason@jpleau.ca>  Fri, 12 Aug 2016 20:22:40 -0400

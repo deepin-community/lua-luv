@@ -1,0 +1,5 @@
+include @@TEMPLATE@@/dev.install.in
+src/lhandle.h  usr/include/lua@@LUA_VERSION@@/luv/
+src/lreq.h usr/include/lua@@LUA_VERSION@@/luv/
+src/luv.h  usr/include/lua@@LUA_VERSION@@/luv/
+src/util.h usr/include/lua@@LUA_VERSION@@/luv/
