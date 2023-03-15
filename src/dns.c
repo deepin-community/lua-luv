@@ -17,9 +17,9 @@
 
 #include "private.h"
 #ifndef WIN32
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
 #endif
 
 static void luv_pushaddrinfo(lua_State* L, struct addrinfo* res) {
@@ -49,7 +49,7 @@ static void luv_pushaddrinfo(lua_State* L, struct addrinfo* res) {
       }
       lua_pushstring(L, luv_sock_num_to_string(curr->ai_socktype));
       lua_setfield(L, -2, "socktype");
-      lua_pushstring(L, luv_af_num_to_string(curr->ai_protocol));
+      lua_pushstring(L, luv_proto_num_to_string(curr->ai_protocol));
       lua_setfield(L, -2, "protocol");
       if (curr->ai_canonname) {
         lua_pushstring(L, curr->ai_canonname);
@@ -134,13 +134,11 @@ static int luv_getaddrinfo(lua_State* L) {
       hints->ai_protocol = lua_tointeger(L, -1);
     }
     else if (lua_isstring(L, -1)) {
-      int protocol = luv_af_string_to_num(lua_tostring(L, -1));
-      if (protocol) {
-        hints->ai_protocol = protocol;
+      int protocol = luv_proto_string_to_num(lua_tostring(L, -1));
+      if (protocol < 0) {
+        return luaL_argerror(L, 3, lua_pushfstring(L, "invalid protocol: %s", lua_tostring(L, -1)));
       }
-      else {
-        return luaL_argerror(L, 3, "Invalid protocol hint");
-      }
+      hints->ai_protocol = protocol;
     }
     else if (!lua_isnil(L, -1)) {
       return luaL_argerror(L, 3, "protocol hint must be string if set");
@@ -194,7 +192,7 @@ static int luv_getaddrinfo(lua_State* L) {
     return luaL_argerror(L, 4, "callback must be provided");
   }
 #endif
-  req = (uv_getaddrinfo_t*)lua_newuserdata(L, sizeof(*req));
+  req = (uv_getaddrinfo_t*)lua_newuserdata(L, uv_req_size(UV_GETADDRINFO));
   req->data = luv_setup_req(L, ctx, ref);
 
   ret = uv_getaddrinfo(ctx->loop, req, ref == LUA_NOREF ? NULL : luv_getaddrinfo_cb, node, service, hints);
@@ -297,7 +295,7 @@ static int luv_getnameinfo(lua_State* L) {
   }
 #endif
 
-  req = (uv_getnameinfo_t*)lua_newuserdata(L, sizeof(*req));
+  req = (uv_getnameinfo_t*)lua_newuserdata(L, uv_req_size(UV_GETNAMEINFO));
   req->data = luv_setup_req(L, ctx, ref);
 
   ret = uv_getnameinfo(ctx->loop, req, ref == LUA_NOREF ? NULL : luv_getnameinfo_cb, (struct sockaddr*)&addr, flags);

@@ -169,4 +169,175 @@ return require('lib/tap')(function (test)
       end))
     end)))
   end, "1.27.0")
+
+  -- return a test function reusable for ipv4 and ipv6
+  local function multicast_join_test(bind_addr, multicast_addr, interface_addr)
+    return function(print, p, expect, uv)
+      local uvVersionGEQ = require('lib/utils').uvVersionGEQ
+      local timeout = uv.new_timer()
+      local TIMEOUT_TIME = 1000
+
+      local server = assert(uv.new_udp())
+      assert(uv.udp_bind(server, bind_addr, TEST_PORT))
+      local _, err, errname = uv.udp_set_membership(server, multicast_addr, interface_addr, "join")
+      if errname == "ENODEV" then
+        print("no multicast route, skipping")
+        server:close()
+        timeout:close()
+        return
+      elseif errname == "EADDRNOTAVAIL" and multicast_addr == "ff02::1" then
+        -- OSX, BSDs, and some other platforms need %lo in their multicast/interface addr
+        -- so try that instead
+        multicast_addr = "ff02::1%lo0"
+        interface_addr = "::1%lo0"
+        assert(uv.udp_set_membership(server, multicast_addr, interface_addr, "join"))
+      else
+        assert(not err, err)
+      end
+
+      local client = assert(uv.new_udp())
+
+      local recv_cb_called = 0
+      local function recv_cb(err, data, addr, flags)
+        assert(not err, err)
+        p(data, addr)
+
+        -- empty callback can happen, just return early
+        if data == nil and addr == nil then
+          return
+        end
+
+        assert(addr)
+        assert(data == "PING")
+
+        recv_cb_called = recv_cb_called + 1
+        if recv_cb_called == 2 then
+          -- note: because of this conditional close, the test will fail with an unclosed handle if recv_cb_called
+          -- doesn't hit 2, so we don't need to expect(recv_cb) or assert recv_cb_called == 2
+          server:close()
+          timeout:close()
+        else
+          -- udp_set_source_membership added in 1.32.0
+          if uvVersionGEQ("1.32.0") then
+            local source_addr = addr.ip
+            assert(server:set_membership(multicast_addr, interface_addr, "leave"))
+            _, err, errname = server:set_source_membership(multicast_addr, interface_addr, source_addr, "join")
+            if errname == "ENOSYS" then
+              -- not all systems support set_source_membership, so rejoin the previous group and continue on
+              assert(server:set_membership(multicast_addr, interface_addr, "join"))
+            else
+              assert(not err, err)
+            end
+          end
+          assert(client:send("PING", multicast_addr, TEST_PORT, expect(function(err)
+            assert(not err, err)
+            client:close()
+          end)))
+        end
+      end
+
+      server:recv_start(recv_cb)
+
+      assert(client:send("PING", multicast_addr, TEST_PORT, expect(function(err)
+        -- EPERM here likely means that a firewall has denied the send, which
+        -- can happen in some build/CI environments, e.g. the Fedora build system.
+        -- Reproducible on Linux with iptables by doing:
+        --  iptables --policy OUTPUT DROP
+        --  iptables -A OUTPUT -s 127.0.0.1 -j ACCEPT
+        -- and for ipv6:
+        --  ip6tables --policy OUTPUT DROP
+        --  ip6tables -A OUTPUT -s ::1 -j ACCEPT
+        if err == "EPERM" then
+          print("send to multicast ip was likely denied by firewall, skipping")
+          client:close()
+          server:close()
+          timeout:close()
+          return
+        end
+        assert(not err, err)
+      end)))
+
+      -- some firewalls might reject incoming messages from multicast IPs,
+      -- so we need a timeout to avoid hanging forever in that scenario
+      timeout:start(TIMEOUT_TIME, 0, expect(function()
+        print("timeout (could be caused by firewall settings)")
+        client:close()
+        server:close()
+        timeout:close()
+      end, 0))
+    end
+  end
+
+  -- TODO This might be overkill, but the multicast
+  -- tests seem to rely on external interfaces being
+  -- available on some platforms. So, we use this to skip
+  -- the tests when there are no relevant exernal interfaces
+  -- available. Note: The Libuv multicast join test does use this
+  -- same check for skipping the ipv6 test; we just expanded it to
+  -- the ipv4 test as well.
+  local function has_external_interface(uv, family)
+    local addresses = assert(uv.interface_addresses())
+    for _, vals in pairs(addresses) do
+      for _, info in ipairs(vals) do
+        if (not family or info.family == family) and not info.internal then
+          return true
+        end
+      end
+    end
+    return false
+  end
+
+  test("udp multicast join ipv4", function(print, p, expect, uv)
+    if not has_external_interface(uv, "inet") then
+      print("no external ipv4 interface, skipping")
+      return
+    end
+    local testfn = multicast_join_test("0.0.0.0", "239.255.0.1", nil)
+    return testfn(print, p, expect, uv)
+  end)
+
+  test("udp multicast join ipv6", function(print, p, expect, uv)
+    if not has_external_interface(uv, "inet6") then
+      print("no external ipv6 interface, skipping")
+      return
+    end
+    local testfn = multicast_join_test("::", "ff02::1", nil)
+    return testfn(print, p, expect, uv)
+  end)
+
+  test("udp recvmmsg", function(print, p, expect, uv)
+    local NUM_SENDS = 8
+    local NUM_MSGS_PER_ALLOC = 4
+
+    local recver = uv.new_udp({mmsgs = NUM_MSGS_PER_ALLOC})
+    assert(recver:bind("0.0.0.0", TEST_PORT))
+
+    local sender = uv.new_udp()
+
+    local msgs_recved = 0
+    local recv_cb = function(err, data, addr, flags)
+      assert(not err, err)
+      p(data, addr)
+
+      -- empty callback can happen, just return early
+      if data == nil and addr == nil then
+        return
+      end
+
+      assert(addr)
+      assert(data == "PING")
+
+      msgs_recved = msgs_recved + 1
+      if msgs_recved == NUM_SENDS then
+        sender:close()
+        recver:close()
+      end
+    end
+
+    assert(recver:recv_start(recv_cb))
+
+    for i=1,NUM_SENDS do
+      assert(sender:try_send("PING", "127.0.0.1", TEST_PORT))
+    end
+  end, "1.39.0")
 end)

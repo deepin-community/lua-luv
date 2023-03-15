@@ -1,3 +1,18 @@
+lua-luv (1.43.0-0-2) unstable; urgency=medium
+
+  * Add allow-stderr restriction for autopkgtests
+
+ -- James McCoy <jamessan@debian.org>  Sun, 27 Feb 2022 21:02:11 -0500
+
+lua-luv (1.43.0-0-1) unstable; urgency=medium
+
+  * New upstream release
+  * Add Lua 5.4 support
+  * Declare compliance with Policy 4.6.0, no changes needed
+  * Remove explicit libkvm-dev Build-Depends now that libuv1-dev added it
+
+ -- James McCoy <jamessan@debian.org>  Sun, 27 Feb 2022 11:41:55 -0500
+
 lua-luv (1.36.0-0-1) unstable; urgency=medium
 
   * New upstream release

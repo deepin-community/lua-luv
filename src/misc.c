@@ -222,10 +222,14 @@ static int luv_getrusage(lua_State* L) {
 }
 
 static int luv_cpu_info(lua_State* L) {
-  uv_cpu_info_t* cpu_infos;
-  int count, i;
+  uv_cpu_info_t* cpu_infos = NULL;
+  int count = 0, i;
   int ret = uv_cpu_info(&cpu_infos, &count);
-  if (ret < 0) return luv_error(L, ret);
+  if (ret < 0)
+  {
+    uv_free_cpu_info(cpu_infos, count);
+    return luv_error(L, ret);
+  }
   lua_newtable(L);
 
   for (i = 0; i < count; i++) {
@@ -724,7 +728,7 @@ static int luv_random(lua_State* L) {
     // ref buffer
     int buf_ref = luaL_ref(L, LUA_REGISTRYINDEX);
 
-    uv_random_t* req = (uv_random_t*)lua_newuserdata(L, sizeof(*req));
+    uv_random_t* req = (uv_random_t*)lua_newuserdata(L, uv_req_size(UV_RANDOM));
     req->data = luv_setup_req(L, ctx, cb_ref);
     ((luv_req_t*)req->data)->req_ref = buf_ref;
 

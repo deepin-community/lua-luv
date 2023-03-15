@@ -10,6 +10,25 @@ return require('lib/tap')(function (test)
     assert(uv.fs_close(fd))
   end)
 
+  test("read a file sync in chunks", function (print, p, expect, uv)
+    local fd = assert(uv.fs_open('README.md', 'r', tonumber('644', 8)))
+    local stat = assert(uv.fs_fstat(fd))
+    local chunks = {}
+    local numchunks = 8
+    local chunksize = math.ceil(stat.size/numchunks)
+    while true do
+      local chunk, err = uv.fs_read(fd, chunksize)
+      assert(not err, err)
+      if #chunk == 0 then
+        break
+      end
+      table.insert(chunks, chunk)
+    end
+    assert(#chunks == numchunks)
+    assert(#table.concat(chunks) == stat.size)
+    assert(uv.fs_close(fd))
+  end)
+
   test("read a file async", function (print, p, expect, uv)
     uv.fs_open('README.md', 'r', tonumber('644', 8), expect(function (err, fd)
       assert(not err, err)
@@ -32,10 +51,13 @@ return require('lib/tap')(function (test)
   test("fs.write", function (print, p, expect, uv)
     local path = "_test_"
     local fd = assert(uv.fs_open(path, "w", 438))
-    uv.fs_write(fd, "Hello World\n", -1)
-    uv.fs_write(fd, {"with\n", "more\n", "lines\n"}, -1)
-    uv.fs_close(fd)
-    uv.fs_unlink(path)
+    -- a mix of async and sync
+    uv.fs_write(fd, "Hello World\n", expect(function(err, n)
+      assert(not err, err)
+      assert(uv.fs_write(fd, {"with\n", "more\n", "lines\n"}))
+      assert(uv.fs_close(fd))
+      assert(uv.fs_unlink(path))
+    end))
   end)
 
   -- collect garbage after uv.fs_write but before the write callback
@@ -47,7 +69,7 @@ return require('lib/tap')(function (test)
     do
       -- the number here gets coerced into a string
       local t = {"with", 600, "lines"}
-      uv.fs_write(fd, t, -1, function()
+      uv.fs_write(fd, t, function()
         local expectedContents = table.concat(t)
         local stat = assert(uv.fs_fstat(fd))
         assert(stat.size == #expectedContents)
@@ -309,4 +331,25 @@ return require('lib/tap')(function (test)
     assert(err:match("^EINVAL:"))
     assert(code=='EINVAL')
   end, "1.34.0")
+
+  test("errors with dest paths", function (print, p, expect, uv)
+    -- this combination will cause all of the functions below to fail
+    local path1, path2 = "_test_", "_testdir_"
+    local fd1 = assert(uv.fs_open(path1, "w", 438))
+    assert(uv.fs_close(fd1))
+    assert(uv.fs_mkdir(path2, tonumber('777', 8)))
+
+    local fns = {"fs_rename", "fs_link", "fs_symlink", "fs_copyfile"}
+    for _, fn_name in ipairs(fns) do
+      if uv[fn_name] then
+        local fn = uv[fn_name]
+        local ok, err, code = fn(path1, path2)
+        p(fn_name, ok, err, code)
+        assert(not ok)
+      end
+    end
+
+    assert(uv.fs_unlink(path1))
+    assert(uv.fs_rmdir(path2))
+  end)
 end)

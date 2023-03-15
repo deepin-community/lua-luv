@@ -7,9 +7,14 @@ endif()
 project (luv C ASM)
 
 set(LUV_VERSION_MAJOR 1)
-set(LUV_VERSION_MINOR 36)
+set(LUV_VERSION_MINOR 43)
 set(LUV_VERSION_PATCH 0)
 set(LUV_VERSION ${LUV_VERSION_MAJOR}.${LUV_VERSION_MINOR}.${LUV_VERSION_PATCH})
+
+if(NOT ${CMAKE_VERSION} VERSION_LESS "3.5.0")
+    # generate compilation database used by C code intelligence tools
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+endif()
 
 option(BUILD_MODULE "Build as module" ON)
 option(BUILD_STATIC_LIBS "Build static library" OFF)
@@ -76,6 +81,7 @@ if (LUA)
   MESSAGE(STATUS "Lua: using information from luarocks")
 
   MESSAGE(STATUS "LUA_LIBDIR: " ${LUA_LIBDIR})
+  MESSAGE(STATUS "LUA_LIBFILE: " ${LUA_LIBFILE})
   MESSAGE(STATUS "LUA_INCDIR: " ${LUA_INCDIR})
   MESSAGE(STATUS "LUA: " ${LUA})
 
@@ -86,29 +92,59 @@ if (LUA)
 
   SET(INSTALL_LIB_DIR ${LIBDIR})
 
-  GET_FILENAME_COMPONENT(LUA_EXEC_NAME ${LUA_EXECUTABLE} NAME_WE)
-  IF(LUA_EXEC_NAME STREQUAL "luajit")
-  FIND_LIBRARY(LUA_LIBRARIES
-    NAMES luajit libluajit
-    PATHS ${LUA_LIBDIR}
-    NO_DEFAULT_PATH)
-  ELSEIF(LUA_EXEC_NAME MATCHES "lua.*")
-    FIND_LIBRARY(LUA_LIBRARIES
-      NAMES lua lua53 lua52 lua51 liblua liblua53 liblua52 liblua51
-      PATHS ${LUA_LIBDIR}
-      NO_DEFAULT_PATH)
-  ENDIF()
-  MESSAGE(STATUS "Lua library: ${LUA_LIBRARIES}")
+  if (LUA_LIBDIR)
+    if (NOT LUA_LIBFILE)
+      # If LIBDIR is set but LIBFILE is not, then that means
+      # Luarocks 2.x is being used, and we'll need to find the lib
+      # ourselves
+      GET_FILENAME_COMPONENT(LUA_EXEC_NAME ${LUA_EXECUTABLE} NAME_WE)
+      IF(LUA_EXEC_NAME STREQUAL "luajit")
+      FIND_LIBRARY(LUA_LIBRARIES
+        NAMES luajit libluajit
+        PATHS ${LUA_LIBDIR}
+        NO_DEFAULT_PATH)
+      ELSEIF(LUA_EXEC_NAME MATCHES "lua.*")
+        FIND_LIBRARY(LUA_LIBRARIES
+          NAMES lua lua54 lua53 lua52 lua51 liblua liblua54 liblua53 liblua52 liblua51
+          PATHS ${LUA_LIBDIR}
+          NO_DEFAULT_PATH)
+      ENDIF()
+    else()
+      # Otherwise, we can just use the LIBFILE that Luarocks provides
+      get_filename_component(LUA_LIBRARIES "${LUA_LIBDIR}/${LUA_LIBFILE}" ABSOLUTE)
+    endif()
+    MESSAGE(STATUS "Lua library: ${LUA_LIBRARIES}")
+  else()
+    MESSAGE(STATUS "Lua library not set, presuming LuaRocks config has link_lua_explicitly set to false")
+  endif()
 
   include_directories(${LUA_INCLUDE_DIR})
 else (LUA)
   if (LUA_BUILD_TYPE STREQUAL System)
     if (USE_LUAJIT)
-      find_package(LuaJIT REQUIRED)
+      # We only link the libs on Windows, so find_package fully succeeding
+      # is only required on Windows
+      if (WIN32)
+        find_package(LuaJIT REQUIRED)
+        link_directories(${LUAJIT_LIBRARIES})
+      else()
+        find_package(LuaJIT)
+      endif()
+      if(NOT LUAJIT_INCLUDE_DIR)
+        message( FATAL_ERROR "Failed to find LuaJIT headers. Variable `LUAJIT_INCLUDE_DIR' expected to be defined.")
+      endif()
       include_directories(${LUAJIT_INCLUDE_DIR})
-      link_directories(${LUAJIT_LIBRARIES})
     else (USE_LUAJIT)
-      find_package(Lua REQUIRED)
+      # We only link the libs on Windows, so find_package fully succeeding
+      # is only required on Windows
+      if (WIN32)
+        find_package(Lua REQUIRED)
+      else()
+        find_package(Lua)
+      endif()
+      if(NOT LUA_INCLUDE_DIR)
+        message( FATAL_ERROR "Failed to find Lua headers. Variable `LUA_INCLUDE_DIR' expected to be defined.")
+      endif()
       include_directories(${LUA_INCLUDE_DIR})
     endif (USE_LUAJIT)
 
@@ -120,14 +156,49 @@ else (LUA)
     endif (LUA_BUILD_TYPE STREQUAL Static)
     if (USE_LUAJIT)
       include(deps/luajit.cmake)
-      include_directories(deps/luajit/src)
+      set(LUA_INCLUDE_DIR deps/luajit/src)
       set(LUAJIT_LIBRARIES luajit-5.1)
     else(USE_LUAJIT)
       include(deps/lua.cmake)
-      include_directories(deps/lua)
+      set(LUA_INCLUDE_DIR deps/lua)
     endif (USE_LUAJIT)
+    include_directories(${LUA_INCLUDE_DIR})
+    set(LUA_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/${LUA_INCLUDE_DIR})
   endif (LUA_BUILD_TYPE STREQUAL System)
 endif (LUA)
+
+if (EXISTS "${LUA_INCLUDE_DIR}/lua.h")
+    # At least 5.[012] have different ways to express the version
+    # so all of them need to be tested. Lua 5.2 defines LUA_VERSION
+    # and LUA_RELEASE as joined by the C preprocessor, so avoid those.
+
+    # lua 5.2 and above
+    file(STRINGS "${LUA_INCLUDE_DIR}/lua.h" LUA_VERSION_MAJOR
+         REGEX "^#define[ \t]+LUA_VERSION_MAJOR[ \t]+\"Lua [0-9]+")
+    file(STRINGS "${LUA_INCLUDE_DIR}/lua.h" LUA_VERSION_MINOR
+         REGEX "^#define[ \t]+LUA_VERSION_MINOR[ \t]+\"Lua [0-9]+")
+
+    if(NOT LUA_VERSION_MAJOR AND NOT LUA_VERSION_MINOR)
+      file(STRINGS "${LUA_INCLUDE_DIR}/lua.h" lua_version_strings
+           REGEX "^#define[ \t]+LUA_VERSION([ \t]+\"Lua [0-9]|_[MR]).*")
+      string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_MAJOR[ \t]+\"([0-9])\"[ \t]*;.*" "\\1" LUA_VERSION_MAJOR ";${lua_version_strings};")
+      if (LUA_VERSION_MAJOR MATCHES "^[0-9]+$")
+          string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_MINOR[ \t]+\"([0-9])\"[ \t]*;.*" "\\1" LUA_VERSION_MINOR ";${lua_version_strings};")
+          string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION_RELEASE[ \t]+\"([0-9])\"[ \t]*;.*" "\\1" LUA_VERSION_PATCH ";${lua_version_strings};")
+          set(LUA_VERSION_STRING "${LUA_VERSION_MAJOR}.${LUA_VERSION_MINOR}.${LUA_VERSION_PATCH}")
+      else ()
+          string(REGEX REPLACE ".*;#define[ \t]+LUA_RELEASE[ \t]+\"Lua ([0-9.]+)\"[ \t]*;.*" "\\1" LUA_VERSION_STRING ";${lua_version_strings};")
+          if (NOT LUA_VERSION_STRING MATCHES "^[0-9.]+$")
+              string(REGEX REPLACE ".*;#define[ \t]+LUA_VERSION[ \t]+\"Lua ([0-9.]+)\"[ \t]*;.*" "\\1" LUA_VERSION_STRING ";${lua_version_strings};")
+          endif ()
+          string(REGEX REPLACE "^([0-9]+)\\.[0-9.]*$" "\\1" LUA_VERSION_MAJOR "${LUA_VERSION_STRING}")
+          string(REGEX REPLACE "^[0-9]+\\.([0-9]+)[0-9.]*$" "\\1" LUA_VERSION_MINOR "${LUA_VERSION_STRING}")
+          string(REGEX REPLACE "^[0-9]+\\.[0-9]+\\.([0-9]).*" "\\1" LUA_VERSION_PATCH "${LUA_VERSION_STRING}")
+      endif ()
+
+      unset(lua_version_strings)
+    endif()
+endif()
 
 if (BUILD_MODULE)
   add_library(luv MODULE src/luv.c)
@@ -144,6 +215,14 @@ if (BUILD_SHARED_LIBS)
   set_target_properties(libluv PROPERTIES PREFIX "")
   set_target_properties(libluv
     PROPERTIES VERSION ${LUV_VERSION} SOVERSION ${LUV_VERSION_MAJOR})
+  # Prevent lib prefix in shared library name
+  if(WIN32)
+    set_target_properties(libluv PROPERTIES IMPORT_PREFIX "")
+  endif(WIN32)
+  if(APPLE)
+    set_target_properties(libluv
+      PROPERTIES LINK_FLAGS "-undefined dynamic_lookup")
+  endif(APPLE)
   list(APPEND ACTIVE_TARGETS "libluv")
 endif (BUILD_SHARED_LIBS)
 
@@ -204,6 +283,8 @@ if (NOT LUA)
       CACHE PATH "Installation directory for static libraries")
   endif (BUILD_STATIC_LIBS)
   if (BUILD_SHARED_LIBS)
+    set(SHAREDLIBS_INSTALL_BIN_DIR "${CMAKE_INSTALL_PREFIX}/bin"
+      CACHE PATH "Installation directory for runtime components")
     set(SHAREDLIBS_INSTALL_LIB_DIR "${CMAKE_INSTALL_PREFIX}/lib"
       CACHE PATH "Installation directory for shared libraries")
   endif (BUILD_SHARED_LIBS)
@@ -243,10 +324,11 @@ if (CMAKE_INSTALL_PREFIX)
   endif (BUILD_STATIC_LIBS)
   if (BUILD_SHARED_LIBS)
     install(TARGETS libluv
+      RUNTIME DESTINATION "${SHAREDLIBS_INSTALL_BIN_DIR}"
       ARCHIVE DESTINATION "${SHAREDLIBS_INSTALL_LIB_DIR}"
       LIBRARY DESTINATION "${SHAREDLIBS_INSTALL_LIB_DIR}"
     )
-    if(UNIX)
+    if(UNIX OR MINGW)
       set(prefix ${CMAKE_INSTALL_PREFIX})
       set(includedir ${SHAREDLIBS_INSTALL_INC_DIR})
       set(libdir ${SHAREDLIBS_INSTALL_LIB_DIR})
