@@ -16,43 +16,45 @@
  */
 
 #include <lua.h>
-#if (LUA_VERSION_NUM != 503)
+#if (LUA_VERSION_NUM < 503)
 #include "compat-5.3.h"
 #endif
 #include "luv.h"
 
-#include "util.c"
-#include "lhandle.c"
-#include "lreq.c"
-#include "loop.c"
-#include "req.c"
-#include "handle.c"
-#include "timer.c"
-#include "prepare.c"
-#include "check.c"
-#include "idle.c"
 #include "async.c"
-#include "poll.c"
-#include "signal.c"
-#include "process.c"
-#include "stream.c"
-#include "tcp.c"
-#include "pipe.c"
-#include "tty.c"
-#include "udp.c"
+#include "check.c"
+#include "constants.c"
+#include "dns.c"
+#include "fs.c"
 #include "fs_event.c"
 #include "fs_poll.c"
-#include "fs.c"
-#include "dns.c"
-#include "thread.c"
-#include "work.c"
+#include "handle.c"
+#include "idle.c"
+#include "lhandle.c"
+#include "loop.c"
+#include "lreq.c"
+#include "metrics.c"
 #include "misc.c"
-#include "constants.c"
+#include "pipe.c"
+#include "poll.c"
+#include "prepare.c"
+#include "process.c"
+#include "req.c"
+#include "signal.c"
+#include "stream.c"
+#include "tcp.c"
+#include "thread.c"
+#include "timer.c"
+#include "tty.c"
+#include "udp.c"
+#include "util.c"
+#include "work.c"
 
 static const luaL_Reg luv_functions[] = {
   // loop.c
   {"loop_close", luv_loop_close},
   {"run", luv_run},
+  {"loop_mode", luv_loop_mode},
   {"loop_alive", luv_loop_alive},
   {"stop", luv_stop},
   {"backend_fd", luv_backend_fd},
@@ -60,9 +62,15 @@ static const luaL_Reg luv_functions[] = {
   {"now", luv_now},
   {"update_time", luv_update_time},
   {"walk", luv_walk},
+#if LUV_UV_VERSION_GEQ(1, 0, 2)
+  {"loop_configure", luv_loop_configure},
+#endif
 
   // req.c
   {"cancel", luv_cancel},
+#if LUV_UV_VERSION_GEQ(1, 19, 0)
+  {"req_get_type", luv_req_get_type},
+#endif
 
   // handle.c
   {"is_active", luv_is_active},
@@ -74,6 +82,9 @@ static const luaL_Reg luv_functions[] = {
   {"send_buffer_size", luv_send_buffer_size},
   {"recv_buffer_size", luv_recv_buffer_size},
   {"fileno", luv_fileno},
+#if LUV_UV_VERSION_GEQ(1, 19, 0)
+  {"handle_get_type", luv_handle_get_type},
+#endif
 
   // timer.c
   {"new_timer", luv_new_timer},
@@ -82,6 +93,9 @@ static const luaL_Reg luv_functions[] = {
   {"timer_again", luv_timer_again},
   {"timer_set_repeat", luv_timer_set_repeat},
   {"timer_get_repeat", luv_timer_get_repeat},
+#if LUV_UV_VERSION_GEQ(1, 40, 0)
+  {"timer_get_due_in", luv_timer_get_due_in},
+#endif
 
   // prepare.c
   {"new_prepare", luv_new_prepare},
@@ -120,6 +134,9 @@ static const luaL_Reg luv_functions[] = {
   {"disable_stdio_inheritance", luv_disable_stdio_inheritance},
   {"spawn", luv_spawn},
   {"process_kill", luv_process_kill},
+#if LUV_UV_VERSION_GEQ(1, 19, 0)
+  {"process_get_pid", luv_process_get_pid},
+#endif
   {"kill", luv_kill},
 
   // stream.c
@@ -131,6 +148,9 @@ static const luaL_Reg luv_functions[] = {
   {"write", luv_write},
   {"write2", luv_write2},
   {"try_write", luv_try_write},
+#if LUV_UV_VERSION_GEQ(1, 42, 0)
+  {"try_write2", luv_try_write2},
+#endif
   {"is_readable", luv_is_readable},
   {"is_writable", luv_is_writable},
   {"stream_set_blocking", luv_stream_set_blocking},
@@ -152,11 +172,17 @@ static const luaL_Reg luv_functions[] = {
 #if LUV_UV_VERSION_GEQ(1, 32, 0)
   {"tcp_close_reset", luv_tcp_close_reset},
 #endif
+#if LUV_UV_VERSION_GEQ(1, 41, 0)
+  {"socketpair", luv_socketpair},
+#endif
 
   // pipe.c
   {"new_pipe", luv_new_pipe},
   {"pipe_open", luv_pipe_open},
   {"pipe_bind", luv_pipe_bind},
+#if LUV_UV_VERSION_GEQ(1, 16, 0)
+  {"pipe_chmod", luv_pipe_chmod},
+#endif
   {"pipe_connect", luv_pipe_connect},
   {"pipe_getsockname", luv_pipe_getsockname},
 #if LUV_UV_VERSION_GEQ(1, 3, 0)
@@ -165,6 +191,9 @@ static const luaL_Reg luv_functions[] = {
   {"pipe_pending_instances", luv_pipe_pending_instances},
   {"pipe_pending_count", luv_pipe_pending_count},
   {"pipe_pending_type", luv_pipe_pending_type},
+#if LUV_UV_VERSION_GEQ(1, 41, 0)
+  {"pipe", luv_pipe},
+#endif
 
   // tty.c
   {"new_tty", luv_new_tty},
@@ -184,6 +213,9 @@ static const luaL_Reg luv_functions[] = {
   {"udp_bind", luv_udp_bind},
   {"udp_getsockname", luv_udp_getsockname},
   {"udp_set_membership", luv_udp_set_membership},
+#if LUV_UV_VERSION_GEQ(1, 32, 0)
+  {"udp_set_source_membership", luv_udp_set_source_membership},
+#endif
   {"udp_set_multicast_loop", luv_udp_set_multicast_loop},
   {"udp_set_multicast_ttl", luv_udp_set_multicast_ttl},
   {"udp_set_multicast_interface", luv_udp_set_multicast_interface},
@@ -353,6 +385,11 @@ static const luaL_Reg luv_functions[] = {
   {"translate_sys_error", luv_translate_sys_error},
 #endif
 
+  // metrics.c
+#if LUV_UV_VERSION_GEQ(1, 39, 0)
+  {"metrics_idle_time", luv_metrics_idle_time},
+#endif
+
   {NULL, NULL}
 };
 
@@ -367,6 +404,9 @@ static const luaL_Reg luv_handle_methods[] = {
   {"send_buffer_size", luv_send_buffer_size},
   {"recv_buffer_size", luv_recv_buffer_size},
   {"fileno", luv_fileno},
+#if LUV_UV_VERSION_GEQ(1, 19, 0)
+  {"get_type", luv_handle_get_type},
+#endif
   {NULL, NULL}
 };
 
@@ -410,6 +450,9 @@ static const luaL_Reg luv_stream_methods[] = {
   {"write", luv_write},
   {"write2", luv_write2},
   {"try_write", luv_try_write},
+#if LUV_UV_VERSION_GEQ(1, 42, 0)
+  {"try_write2", luv_try_write2},
+#endif
   {"is_readable", luv_is_readable},
   {"is_writable", luv_is_writable},
   {"set_blocking", luv_stream_set_blocking},
@@ -422,6 +465,9 @@ static const luaL_Reg luv_stream_methods[] = {
 static const luaL_Reg luv_pipe_methods[] = {
   {"open", luv_pipe_open},
   {"bind", luv_pipe_bind},
+#if LUV_UV_VERSION_GEQ(1, 16, 0)
+  {"chmod", luv_pipe_chmod},
+#endif
   {"connect", luv_pipe_connect},
   {"getsockname", luv_pipe_getsockname},
 #if LUV_UV_VERSION_GEQ(1, 3, 0)
@@ -447,6 +493,9 @@ static const luaL_Reg luv_prepare_methods[] = {
 
 static const luaL_Reg luv_process_methods[] = {
   {"kill", luv_process_kill},
+#if LUV_UV_VERSION_GEQ(1, 19, 0)
+  {"get_pid", luv_process_get_pid},
+#endif
   {NULL, NULL}
 };
 
@@ -472,6 +521,9 @@ static const luaL_Reg luv_timer_methods[] = {
   {"again", luv_timer_again},
   {"set_repeat", luv_timer_set_repeat},
   {"get_repeat", luv_timer_get_repeat},
+#if LUV_UV_VERSION_GEQ(1, 40, 0)
+  {"get_due_in", luv_timer_get_due_in},
+#endif
   {NULL, NULL}
 };
 
@@ -488,6 +540,9 @@ static const luaL_Reg luv_udp_methods[] = {
   {"bind", luv_udp_bind},
   {"getsockname", luv_udp_getsockname},
   {"set_membership", luv_udp_set_membership},
+#if LUV_UV_VERSION_GEQ(1, 32, 0)
+  {"set_source_membership", luv_udp_set_source_membership},
+#endif
   {"set_multicast_loop", luv_udp_set_multicast_loop},
   {"set_multicast_ttl", luv_udp_set_multicast_ttl},
   {"set_multicast_interface", luv_udp_set_multicast_interface},
@@ -574,12 +629,31 @@ static void luv_handle_init(lua_State* L) {
   lua_setfield(L, LUA_REGISTRYINDEX, "uv_stream");
 }
 
+static const luaL_Reg luv_req_methods[] = {
+  // req.c
+  {"cancel", luv_cancel},
+#if LUV_UV_VERSION_GEQ(1, 19, 0)
+  {"get_type", luv_req_get_type},
+#endif
+  {NULL, NULL}
+};
+
+static void luv_req_init(lua_State* L) {
+  luaL_newmetatable(L, "uv_req");
+  lua_pushcfunction(L, luv_req_tostring);
+  lua_setfield(L, -2, "__tostring");
+  luaL_newlib(L, luv_req_methods);
+  lua_setfield(L, -2, "__index");
+  lua_pop(L, 1);
+}
+
 // Call lua function, will pop nargs values from top of vm stack and push some
 // values according to nresults. When error occurs, it will print error message
 // to stderr, and memory allocation error will cause exit.
 LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags) {
   int ret, top, errfunc;
 
+  top  = lua_gettop(L);
   // Get the traceback function in case of error
   if ((flags & (LUVF_CALLBACK_NOTRACEBACK|LUVF_CALLBACK_NOERRMSG) ) == 0)
   {
@@ -590,7 +664,6 @@ LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags) {
     errfunc -= (nargs+1);
   }else
     errfunc = 0;
-  top  = lua_gettop(L);
 
   ret = lua_pcall(L, nargs, nresult, errfunc);
   switch (ret) {
@@ -624,6 +697,15 @@ LUALIB_API int luv_cfpcall(lua_State* L, int nargs, int nresult, int flags) {
       nresult = lua_gettop(L) - top + nargs + 1;
     return nresult;
   }
+  return ret;
+}
+
+// Call lua c function in protected mode. When error occurs, it will print
+// error message to stderr, and memory allocation error will cause exit.
+LUALIB_API int luv_cfcpcall(lua_State* L, lua_CFunction func, void * ud, int flags) {
+  lua_pushcfunction(L, func);
+  lua_pushlightuserdata(L, ud);
+  int ret = luv_cfpcall(L, 1, 0, flags);
   return ret;
 }
 
@@ -662,12 +744,25 @@ LUALIB_API void luv_set_loop(lua_State* L, uv_loop_t* loop) {
 
   ctx->loop = loop;
   ctx->L = L;
+  ctx->mode = -1;
 }
 
 // Set an external event callback routine, before luaopen_luv
 LUALIB_API void luv_set_callback(lua_State* L, luv_CFpcall pcall) {
   luv_ctx_t* ctx = luv_context(L);
-  ctx->pcall = pcall;
+  ctx->cb_pcall = pcall;
+}
+
+// Set an external thread routine, before luaopen_luv
+LUALIB_API void luv_set_thread(lua_State* L, luv_CFpcall pcall) {
+  luv_ctx_t* ctx = luv_context(L);
+  ctx->thrd_pcall = pcall;
+}
+
+// Set an external c thread routine, before luaopen_luv
+LUALIB_API void luv_set_cthread(lua_State* L, luv_CFcpcall cpcall) {
+  luv_ctx_t* ctx = luv_context(L);
+  ctx->thrd_cpcall = cpcall;
 }
 
 static void walk_cb(uv_handle_t *handle, void *arg)
@@ -721,15 +816,31 @@ LUALIB_API int luaopen_luv (lua_State* L) {
 
     ctx->loop = loop;
     ctx->L = L;
+    ctx->mode = -1;
 
     ret = uv_loop_init(loop);
     if (ret < 0) {
       return luaL_error(L, "%s: %s\n", uv_err_name(ret), uv_strerror(ret));
     }
+
+    /* do cleanup in main thread */
+    lua_getglobal(L, "_THREAD");
+    if (lua_isnil(L, -1))
+      atexit(luv_work_cleanup);
+    lua_pop(L, 1);
   }
   // pcall is NULL, luv use default callback routine
-  if (ctx->pcall==NULL) {
-    ctx->pcall = luv_cfpcall;
+  if (ctx->cb_pcall==NULL) {
+    ctx->cb_pcall = luv_cfpcall;
+  }
+
+  // pcall is NULL, luv use default thread routine
+  if (ctx->thrd_pcall==NULL) {
+    ctx->thrd_pcall = luv_cfpcall;
+  }
+
+  if (ctx->thrd_cpcall==NULL) {
+    ctx->thrd_cpcall = luv_cfcpcall;
   }
 
   luv_req_init(L);

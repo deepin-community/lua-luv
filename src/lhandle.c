@@ -37,6 +37,7 @@ static luv_handle_t* luv_setup_handle(lua_State* L, luv_ctx_t* ctx) {
   switch (handle->type) {
     UV_HANDLE_TYPE_MAP(XX)
     default:
+      free(data);
       luaL_error(L, "Unknown handle type");
       return NULL;
   }
@@ -97,7 +98,7 @@ static void luv_call_callback(lua_State* L, luv_handle_t* data, luv_callback_id 
       lua_insert(L, -1 - nargs);
     }
 
-    ctx->pcall(L, nargs, 0, 0);
+    ctx->cb_pcall(L, nargs, 0, 0);
   }
 }
 

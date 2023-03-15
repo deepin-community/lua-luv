@@ -7,17 +7,15 @@ Copyright: The Luvit Authors
 License: Apache-2.0
 
 Files: debian/*
-Copyright: Copyright (c) 2016 Jason Pleau <jason@jpleau.ca>
+Copyright:
+ 2016 Jason Pleau <jason@jpleau.ca>
+ 2019-2022 James McCoy <jamessan@debian.org>
 License: Apache-2.0
 
 Files: cmake/Modules/FindLuaJIT.cmake
 Copyright: 2013 Rolf Eike Beer <eike@sf-mail.de>
            2007-2009 Kitware, Inc.
 License: BSD-3-clause
-
-Files: deps/lua_one.c
-Copyright: 1994–2016 Lua.org, PUC-Rio.
-License: Expat
 
 Files: deps/lua.cmake
        deps/luajit.cmake

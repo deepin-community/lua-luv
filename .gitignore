@@ -1,1 +1,10 @@
-.pc/
+build
+libluv.a
+libluv.so
+luv.so
+luv.dll
+luajit.exe
+luv-*.tar.gz
+luv-*.src.rock
+luv-*/
+build.luarocks/

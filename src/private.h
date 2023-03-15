@@ -2,15 +2,15 @@
 #define LUV_PRIVATE_H
 
 #include <lua.h>
-#if (LUA_VERSION_NUM != 503)
+#if (LUA_VERSION_NUM < 503)
 #include "compat-5.3.h"
 #endif
 
-#include "luv.h"
-#include "util.h"
 #include "lhandle.h"
 #include "lreq.h"
 #include "lthreadpool.h"
+#include "luv.h"
+#include "util.h"
 
 #if defined(__clang__)
 #pragma clang diagnostic push
@@ -82,6 +82,8 @@ static int luv_sock_string_to_num(const char* string);
 static const char* luv_sock_num_to_string(const int num);
 static int luv_sig_string_to_num(const char* string);
 static const char* luv_sig_num_to_string(const int num);
+static int luv_proto_string_to_num(const char* string);
+static const char* luv_proto_num_to_string(int num);
 
 /* From util.c */
 // Push a Libuv error code onto the Lua stack
@@ -101,17 +103,25 @@ static int luv_is_callable(lua_State* L, int index);
 // Check if the argument is callable and throw an error if it's not
 static void luv_check_callable(lua_State* L, int index);
 
+// Throw an argument error formatted with the type name of the value at the argument's index
+// Example: luv_arg_type_error(L, 1, "expected number or table, got %s");
+static int luv_arg_type_error(lua_State* L, int index, const char* fmt);
+
 static int luv_optboolean(lua_State*L, int idx, int defaultval);
 
 /* From thread.c */
 static lua_State* luv_thread_acquire_vm();
 
+/* From process.c */
+static int luv_parse_signal(lua_State* L, int slot);
+
 /* From work.c */
-static const char* luv_thread_dumped(lua_State* L, int idx, size_t* l);
+static int luv_thread_dumped(lua_State* L, int idx);
 static const char* luv_getmtname(lua_State *L, int idx);
 static int luv_thread_arg_set(lua_State* L, luv_thread_arg_t* args, int idx, int top, int flags);
 static int luv_thread_arg_push(lua_State* L, luv_thread_arg_t* args, int flags);
 static void luv_thread_arg_clear(lua_State* L, luv_thread_arg_t* args, int flags);
+static int luv_thread_arg_error(lua_State* L);
 
 static luv_acquire_vm acquire_vm_cb = NULL;
 static luv_release_vm release_vm_cb = NULL;
