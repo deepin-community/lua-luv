@@ -1,12 +1,14 @@
 Source: lua-luv
 Priority: optional
-Maintainer: Jason Pleau <jason@jpleau.ca>
-Uploaders: James McCoy <jamessan@debian.org>
+Maintainer: Debian Lua Team <pkg-lua-devel@lists.alioth.debian.org>
+Uploaders:
+ Jason Pleau <jason@jpleau.ca>,
+ James McCoy <jamessan@debian.org>,
 Build-Depends: debhelper-compat (= 12),
-               dh-lua,
+               dh-lua (>= 28),
                lua-compat53-dev,
                libuv1-dev,
-Standards-Version: 4.6.0
+Standards-Version: 4.6.1
 Section: interpreters
 Rules-Requires-Root: no
 Homepage: https://github.com/luvit/luv

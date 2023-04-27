@@ -125,6 +125,52 @@ return require('lib/tap')(function (test)
     end
   end)
 
+  test("fs.scandir sync error", function (print, p, expect, uv)
+    local req, err, code = uv.fs_scandir('BAD_FILE!')
+    p{err=err,code=code,req=req}
+    assert(not req)
+    assert(err)
+    assert(code == "ENOENT")
+  end)
+
+  test("fs.scandir async error", function (print, p, expect, uv)
+    local _req, _err = uv.fs_scandir('BAD_FILE!', expect(function(err, req)
+      p{err=err,req=req}
+      assert(not req)
+      assert(err)
+    end))
+    -- Note: when using the async version, the initial return only errors
+    -- if there is an error when setting up the internal Libuv call
+    -- (e.g. if there's an out-of-memory error when copying the path).
+    -- So even though the callback will have an error, the initial call
+    -- should return a valid uv_fs_t userdata without an error.
+    assert(_req)
+    assert(not _err)
+  end)
+
+  test("fs.scandir async", function (print, p, expect, uv)
+    assert(uv.fs_scandir('.', function(err, req)
+      assert(not err)
+      local function iter()
+        return uv.fs_scandir_next(req)
+      end
+      for name, ftype in iter do
+        p{name=name, ftype=ftype}
+        assert(name)
+        -- ftype is not available in all filesystems; for example it's
+        -- provided for HFS+ (OSX), NTFS (Windows) but not for ext4 (Linux).
+      end
+    end))
+  end)
+
+  -- this test does nothing on its own, but when run with a leak checker,
+  -- it will check that the memory allocated by Libuv for req is cleaned up
+  -- even if its not iterated fully (or at all)
+  test("fs.scandir with no iteration", function(print, p, expect, uv)
+    local req = uv.fs_scandir('.')
+    assert(req)
+  end)
+
   test("fs.realpath", function (print, p, expect, uv)
     p(assert(uv.fs_realpath('.')))
     assert(uv.fs_realpath('.', expect(function (err, path)
@@ -210,6 +256,17 @@ return require('lib/tap')(function (test)
       uv.fs_readdir(dir, readdir_cb)
     end
     assert(uv.fs_opendir('.', opendir_cb, 50))
+  end, "1.28.0")
+
+  test("fs.opendir and fs.closedir in a loop", function(print, p, expect, uv)
+    -- Previously, this triggered a GC/closedir race condition
+    -- see https://github.com/luvit/luv/issues/597
+    for _ = 1,1000 do
+      local dir, err = uv.fs_opendir('.', nil, 64)
+      if not err then
+        uv.fs_closedir(dir)
+      end
+    end
   end, "1.28.0")
 
   test("fs.statfs sync", function (print, p, expect, uv)

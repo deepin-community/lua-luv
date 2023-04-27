@@ -1,3 +1,18 @@
+lua-luv (1.44.2-0-1deepin1) unstable; urgency=medium
+
+  * Add minimum dh_lua version limit 
+
+ -- xiangzelong <xiangzelong@deepin.org>  Thu, 27 Apr 2023 15:36:54 +0800
+
+lua-luv (1.44.2-0-1) unstable; urgency=medium
+
+  * New upstream release
+  * Set Forwarded: not-needed for disable_some_tests.patch
+  * Declare compliance with Policy 4.6.1, no changes needed
+  * Set Lua Team as maintainer, myself as an Uploader
+
+ -- James McCoy <jamessan@debian.org>  Fri, 05 Aug 2022 20:44:57 -0400
+
 lua-luv (1.43.0-0-2) unstable; urgency=medium
 
   * Add allow-stderr restriction for autopkgtests

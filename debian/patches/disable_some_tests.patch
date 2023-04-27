@@ -7,6 +7,7 @@ Description: disable tests that require network or fail to run
  Additionally some tests fail to pass on 32bit architectures with Lua5.1, until
  this is fixed these tests are disabled.
 Author: Jason Pleau <jason@jpleau.ca>
+Forwarded: not-needed
 --- a/tests/run.lua
 +++ b/tests/run.lua
 @@ -18,11 +18,13 @@

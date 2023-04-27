@@ -306,6 +306,9 @@ static const luaL_Reg luv_functions[] = {
   {"os_tmpdir", luv_os_tmpdir},
   {"os_get_passwd", luv_os_get_passwd},
 #endif
+#if LUV_UV_VERSION_GEQ(1, 44, 0)
+  {"available_parallelism", luv_available_parallelism},
+#endif
   {"cpu_info", luv_cpu_info},
   {"cwd", luv_cwd},
   {"exepath", luv_exepath},
@@ -644,6 +647,17 @@ static void luv_req_init(lua_State* L) {
   lua_setfield(L, -2, "__tostring");
   luaL_newlib(L, luv_req_methods);
   lua_setfield(L, -2, "__index");
+  lua_pop(L, 1);
+
+  // Only used for things that need to be garbage collected
+  // (e.g. the req when using uv_fs_scandir)
+  luaL_newmetatable(L, "uv_fs");
+  lua_pushcfunction(L, luv_req_tostring);
+  lua_setfield(L, -2, "__tostring");
+  luaL_newlib(L, luv_req_methods);
+  lua_setfield(L, -2, "__index");
+  lua_pushcfunction(L, luv_fs_gc);
+  lua_setfield(L, -2, "__gc");
   lua_pop(L, 1);
 }
 
